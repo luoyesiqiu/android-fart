@@ -14,6 +14,12 @@ Fart是art平台下利用主动调用实现的脱壳方案。本项目修改自F
 
 - [Nexus5 Android7.1](https://share.weiyun.com/LsNOcHJv) 密码：6ec5yz
 
+## Dex修复
+
+```
+java -jar DexRepair.jar /path/to/dex /path/to/bin
+```
+
 ## 感谢
 
 - [FART](https://github.com/hanbinglengyue/FART)
