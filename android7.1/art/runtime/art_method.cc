@@ -316,17 +316,23 @@ extern "C" void art_quick_invoke_static_stub(ArtMethod*, uint32_t*, uint32_t, Th
 					long outlen = 0;
 					char *base64result =
 					    base64_encode((char *) item,
-							  (long)
-							  code_item_len,
+							  (long)code_item_len,
 							  &outlen);
-					(void)write(fp2, base64result, outlen);
-					(void)write(fp2, "};", 2);
+          char *tail = (char*)malloc(outlen + 2);
+          memset(tail, 0 ,outlen + 2);
+          sprintf(tail,"%s};",base64result); 
+					(void)write(fp2, tail, outlen + 2);
 					fsync(fp2);
 					close(fp2);
 					if (base64result != nullptr) {
 						free(base64result);
 						base64result = nullptr;
 					}
+
+          if(tail != nullptr){
+            free(tail);
+            tail = nullptr;
+          }
 				}
 
 			}
