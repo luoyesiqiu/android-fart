@@ -16,9 +16,7 @@ Fart是art平台下利用主动调用实现的脱壳方案。本项目修改自F
 
 ## Dex修复
 
-```
-java -jar DexRepair.jar /path/to/dex /path/to/bin
-```
+如有需要，请使用[DexRepair](https://github.com/luoyesiqiu/DexRepair)项目对dex进行修复
 
 ## 感谢
 
