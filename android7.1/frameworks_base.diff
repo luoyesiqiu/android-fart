@@ -1,0 +1,96 @@
+
+project frameworks/base/
+diff --git a/api/current.txt b/api/current.txt
+index 8655d899580..2523b9866fe 100644
+--- a/api/current.txt
++++ b/api/current.txt
+@@ -40313,6 +40313,18 @@ package android.util {
+     field public final int mTag;
+   }
+ 
++  public class Fart {
++    ctor public Fart();
++    method public static void fart(android.content.Context);
++    method public static void fartthread(android.content.Context);
++    method public static java.lang.reflect.Field getClassField(java.lang.ClassLoader, java.lang.String, java.lang.String);
++    method public static java.lang.Object getClassFieldObject(java.lang.ClassLoader, java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.ClassLoader getClassloader();
++    method public static java.lang.Object getFieldOjbect(java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.Object invokeStaticMethod(java.lang.String, java.lang.String, java.lang.Class[], java.lang.Object[]);
++    method public static void loadClassAndInvoke(java.lang.ClassLoader, java.lang.String, java.lang.reflect.Method);
++  }
++
+   public deprecated class FloatMath {
+   }
+ 
+diff --git a/api/system-current.txt b/api/system-current.txt
+index 6b6f7e99e4b..95d9c948cb5 100644
+--- a/api/system-current.txt
++++ b/api/system-current.txt
+@@ -43491,6 +43491,18 @@ package android.util {
+     field public final int mTag;
+   }
+ 
++  public class Fart {
++    ctor public Fart();
++    method public static void fart(android.content.Context);
++    method public static void fartthread(android.content.Context);
++    method public static java.lang.reflect.Field getClassField(java.lang.ClassLoader, java.lang.String, java.lang.String);
++    method public static java.lang.Object getClassFieldObject(java.lang.ClassLoader, java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.ClassLoader getClassloader();
++    method public static java.lang.Object getFieldOjbect(java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.Object invokeStaticMethod(java.lang.String, java.lang.String, java.lang.Class[], java.lang.Object[]);
++    method public static void loadClassAndInvoke(java.lang.ClassLoader, java.lang.String, java.lang.reflect.Method);
++  }
++
+   public deprecated class FloatMath {
+   }
+ 
+diff --git a/api/test-current.txt b/api/test-current.txt
+index fcbd1b51926..2b9e0b8d8a4 100644
+--- a/api/test-current.txt
++++ b/api/test-current.txt
+@@ -40399,6 +40399,18 @@ package android.util {
+     field public final int mTag;
+   }
+ 
++  public class Fart {
++    ctor public Fart();
++    method public static void fart(android.content.Context);
++    method public static void fartthread(android.content.Context);
++    method public static java.lang.reflect.Field getClassField(java.lang.ClassLoader, java.lang.String, java.lang.String);
++    method public static java.lang.Object getClassFieldObject(java.lang.ClassLoader, java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.ClassLoader getClassloader();
++    method public static java.lang.Object getFieldOjbect(java.lang.String, java.lang.Object, java.lang.String);
++    method public static java.lang.Object invokeStaticMethod(java.lang.String, java.lang.String, java.lang.Class[], java.lang.Object[]);
++    method public static void loadClassAndInvoke(java.lang.ClassLoader, java.lang.String, java.lang.reflect.Method);
++  }
++
+   public deprecated class FloatMath {
+   }
+ 
+diff --git a/core/java/android/app/ActivityThread.java b/core/java/android/app/ActivityThread.java
+index eb257c59b5c..760191a569c 100644
+--- a/core/java/android/app/ActivityThread.java
++++ b/core/java/android/app/ActivityThread.java
+@@ -21,6 +21,9 @@ import android.annotation.Nullable;
+ import android.app.assist.AssistContent;
+ import android.app.assist.AssistStructure;
+ import android.app.backup.BackupAgent;
++//fart add start
++import android.util.Fart;
++//fart add end
+ import android.content.BroadcastReceiver;
+ import android.content.ComponentCallbacks2;
+ import android.content.ComponentName;
+@@ -2686,7 +2689,9 @@ public final class ActivityThread {
+                     + ": " + e.toString(), e);
+             }
+         }
+-
++        //fart add start
++        Fart.fartthread(activity.getApplication().getApplicationContext());
++        //fart add end
+         return activity;
+     }
+ 

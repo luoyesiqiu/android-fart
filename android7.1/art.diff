@@ -1,0 +1,569 @@
+
+project art/
+diff --git a/runtime/Android.mk b/runtime/Android.mk
+index aa12c83ce..58311555d 100644
+--- a/runtime/Android.mk
++++ b/runtime/Android.mk
+@@ -483,6 +483,7 @@ $$(ENUM_OPERATOR_OUT_GEN): $$(GENERATED_SRC_DIR)/%_operator_out.cc : $(LOCAL_PAT
+ endif
+ 
+   LOCAL_CFLAGS := $$(LIBART_CFLAGS)
++  LOCAL_CPPFLAGS :=  -Wno-unused-function
+   LOCAL_LDFLAGS := $$(LIBART_LDFLAGS)
+   ifeq ($$(art_target_or_host),target)
+     LOCAL_CFLAGS += $$(LIBART_TARGET_CFLAGS)
+diff --git a/runtime/art_method.cc b/runtime/art_method.cc
+index f86cb1351..99e1650ad 100644
+--- a/runtime/art_method.cc
++++ b/runtime/art_method.cc
+@@ -39,14 +39,407 @@
+ #include "oat_file-inl.h"
+ #include "scoped_thread_state_change.h"
+ #include "well_known_classes.h"
+-
++//fart add start
++#include <pthread.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include "runtime.h"
++#include <android/log.h>
++#include <assert.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <stdarg.h>
++#include <stddef.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <sys/socket.h>
++#include <sys/types.h>
++#include <sys/uio.h>
++#include <sys/un.h>
++#include <time.h>
++#include <unistd.h>
++#include <sys/syscall.h>
++#define gettidv1() syscall(__NR_gettid)
++#define LOG_TAG "ActivityThread"
++#define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
++//fart add end
+ namespace art {
+ 
+ extern "C" void art_quick_invoke_stub(ArtMethod*, uint32_t*, uint32_t, Thread*, JValue*,
+                                       const char*);
+ extern "C" void art_quick_invoke_static_stub(ArtMethod*, uint32_t*, uint32_t, Thread*, JValue*,
+                                              const char*);
++//fart add start
++
++	uint8_t *codeitem_end(const uint8_t ** pData) {
++		uint32_t num_of_list = DecodeUnsignedLeb128(pData);
++		for (; num_of_list > 0; num_of_list--) {
++			int32_t num_of_handlers =
++			    DecodeSignedLeb128(pData);
++			int num = num_of_handlers;
++			if (num_of_handlers <= 0) {
++				num = -num_of_handlers;
++			}
++			for (; num > 0; num--) {
++				DecodeUnsignedLeb128(pData);
++				DecodeUnsignedLeb128(pData);
++			}
++			if (num_of_handlers <= 0) {
++				DecodeUnsignedLeb128(pData);
++			}
++		}
++		return (uint8_t *) (*pData);
++	}
++
++	extern "C" char *base64_encode(char *str, long str_len,
++				       long *outlen) {
++		long len;
++		char *res;
++		int i, j;
++		const char *base64_table =
++		    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++		if (str_len % 3 == 0)
++			len = str_len / 3 * 4;
++		else
++			len = (str_len / 3 + 1) * 4;
++
++		res = (char *) malloc(sizeof(char) * (len + 1));
++		res[len] = '\0';
++		*outlen = len;
++		for (i = 0, j = 0; i < len - 2; j += 3, i += 4) {
++			res[i] = base64_table[str[j] >> 2];
++			res[i + 1] =
++			    base64_table[(str[j] & 0x3) << 4 |
++					 (str[j + 1] >> 4)];
++			res[i + 2] =
++			    base64_table[(str[j + 1] & 0xf) << 2 |
++					 (str[j + 2] >> 6)];
++			res[i + 3] = base64_table[str[j + 2] & 0x3f];
++		}
++
++		switch (str_len % 3) {
++		case 1:
++			res[i - 2] = '=';
++			res[i - 1] = '=';
++			break;
++		case 2:
++			res[i - 1] = '=';
++			break;
++		}
++
++		return res;
++	}
++
++  extern "C" void dumpCodeItem(const DexFile *dex_file,ArtMethod *artmethod,char *procName)
++    SHARED_REQUIRES(Locks::mutator_lock_){
++    const int BUFF_LEN = 4096;
++    char* buffer  = (char*)malloc(BUFF_LEN);
++    if(buffer == nullptr){
++      return;
++    }
++    const char *methodname = PrettyMethod(artmethod).c_str();
++    const uint8_t *begin_ = dex_file->Begin();
++    const DexFile::CodeItem * code_item =
++    artmethod->GetCodeItem();
++    	if (LIKELY(code_item != nullptr)) {
++      int code_item_len = 0;
++      uint8_t *item = (uint8_t *) code_item;
++      if (code_item->tries_size_ > 0) {
++        const uint8_t *handler_data = (const uint8_t *) (DexFile::GetTryItems(*code_item,code_item->tries_size_));
++        uint8_t *tail = codeitem_end(&handler_data);
++        code_item_len = (int) (tail - item);
++      } else {
++        code_item_len = 16 + code_item -> insns_size_in_code_units_ * 2;
++      }
++      memset(buffer, 0, BUFF_LEN);
++      int size_int = (int) dex_file->Size();	// Length of data
++      uint32_t method_idx = artmethod->GetMethodIndex2();
++      sprintf(buffer,"/sdcard/fartDump/%s/%d_%ld.bin",
++        procName,
++        size_int,
++        gettidv1()
++        );
++      int bin_fp = open(buffer,O_CREAT | O_APPEND | O_RDWR,0666);
++      if (bin_fp > 0) {
++        lseek(bin_fp, 0, SEEK_END);
++        memset(buffer, 0, BUFF_LEN);
++        int offset = (int) (item - begin_);
++        sprintf(buffer,
++          "{name:%s,method_idx:%d,offset:%d,code_item_len:%d,ins:",
++          methodname, 
++          method_idx,
++          offset, code_item_len
++          );
++        int contentlength = 0;
++        while (buffer[contentlength] != 0){
++          contentlength++;
++        }
++        (void)write(bin_fp, (void *) buffer,contentlength);
++        long outlen = 0;
++        char *base64result = base64_encode((char *) item,(long)code_item_len,&outlen);
++        char *item_tail = (char*)malloc(outlen + 2);
++        memset(item_tail, 0 ,outlen + 2);
++        sprintf(item_tail,"%s};",base64result); 
++        (void)write(bin_fp, item_tail, outlen + 2);
++        fsync(bin_fp);
++        close(bin_fp);
++        if (base64result != nullptr) {
++          free(base64result);
++          base64result = nullptr;
++        }
++
++        if(item_tail != nullptr){
++          free(item_tail);
++          item_tail = nullptr;
++        }
++      }
++
++    }
++    else{
++      LOG(INFO) << "dumpArtMethod() : codeItem is null";
++    }
++
++    if(buffer != nullptr){
++      free(buffer);
++      buffer = nullptr;
++    }
++  }
+ 
++	extern "C" void dumpDexByExecute(ArtMethod * artmethod)
++	 SHARED_REQUIRES(Locks::mutator_lock_) {
++		char *dexfilepath = (char *) malloc(sizeof(char) * 2000);
++		if (dexfilepath == nullptr) {
++			LOG(INFO) <<
++			    "ArtMethod::dumpDexByExecute,methodname:"
++			    << PrettyMethod(artmethod).
++			    c_str() << "malloc 2000 byte failed";
++			return;
++		}
++    const char *methodname = PrettyMethod(artmethod).c_str();
++		int fcmdline = -1;
++		char szCmdline[64] = { 0 };
++		char szProcName[256] = { 0 };
++		int procid = getpid();
++		sprintf(szCmdline, "/proc/%d/cmdline", procid);
++		fcmdline = open(szCmdline, O_RDONLY, 0644);
++		if (fcmdline > 0) {
++			(void)read(fcmdline, szProcName, 256);
++			close(fcmdline);
++		}
++
++		if (szProcName[0]) {
++
++			const DexFile *dex_file = artmethod->GetDexFile();
++			const uint8_t *begin_ = dex_file->Begin();	// Start of data.
++			size_t size_ = dex_file->Size();	// Length of data.
++
++      if(strstr(methodname,"<clinit>") != nullptr){
++          memset(dexfilepath, 0, 2000);
++          int size_int_ = (int) size_;
++
++          memset(dexfilepath, 0, 2000);
++          sprintf(dexfilepath, "%s", "/sdcard/fartDump");
++          mkdir(dexfilepath, 0777);
++
++          memset(dexfilepath, 0, 2000);
++          sprintf(dexfilepath, "/sdcard/fartDump/%s",
++            szProcName);
++          mkdir(dexfilepath, 0777);
++
++          memset(dexfilepath, 0, 2000);
++          sprintf(dexfilepath,
++            "/sdcard/fartDump/%s/%d_dexfile_execute.dex",
++            szProcName, size_int_);
++          int dexfilefp = open(dexfilepath, O_RDONLY, 0666);
++          if (dexfilefp > 0) {
++            close(dexfilefp);
++            dexfilefp = 0;
++
++          } else {
++            dexfilefp =
++                open(dexfilepath, O_CREAT | O_RDWR,
++                0666);
++            if (dexfilefp > 0) {
++              (void)write(dexfilefp, (void *) begin_,
++                    size_);
++              fsync(dexfilefp);
++              close(dexfilefp);
++            }
++          }
++      }
++
++      //dumpCodeItem(dex_file,artmethod,szProcName);
++
++		}//szProcName != null
++
++		if (dexfilepath != nullptr) {
++			free(dexfilepath);
++			dexfilepath = nullptr;
++		}
++
++	}
++
++	extern "C" void dumpDexAndArtMethod(ArtMethod * artmethod)
++	 SHARED_REQUIRES(Locks::mutator_lock_) {
++         		char *dexfilepath = (char *) malloc(sizeof(char) * 2000);
++		if (dexfilepath == nullptr) {
++			LOG(INFO) <<
++			    "ArtMethod::dumpArtMethodinvoked,methodname:"
++			    << PrettyMethod(artmethod).
++			    c_str() << "malloc 2000 byte failed";
++			return;
++		}
++		int fcmdline = -1;
++		char szCmdline[64] = { 0 };
++		char szProcName[256] = { 0 };
++		int procid = getpid();
++		sprintf(szCmdline, "/proc/%d/cmdline", procid);
++		fcmdline = open(szCmdline, O_RDONLY, 0644);
++		if (fcmdline > 0) {
++			(void)read(fcmdline, szProcName, 256);
++			close(fcmdline);
++		}
++
++		if (szProcName[0]) {
++
++			const DexFile *dex_file = artmethod->GetDexFile();
++			// const char *methodname =
++			//     PrettyMethod(artmethod).c_str();
++			const uint8_t *begin_ = dex_file->Begin();
++			size_t size_ = dex_file->Size();
++
++			memset(dexfilepath, 0, 2000);
++			int size_int_ = (int) size_;
++
++			memset(dexfilepath, 0, 2000);
++			sprintf(dexfilepath, "%s", "/sdcard/fartDump");
++			mkdir(dexfilepath, 0777);
++
++			memset(dexfilepath, 0, 2000);
++			sprintf(dexfilepath, "/sdcard/fartDump/%s",
++				szProcName);
++			mkdir(dexfilepath, 0777);
++
++			memset(dexfilepath, 0, 2000);
++			sprintf(dexfilepath,
++				"/sdcard/fartDump/%s/%d_dexfile.dex",
++				szProcName, size_int_);
++			int dexfilefp = open(dexfilepath, O_RDONLY, 0666);
++			if (dexfilefp > 0) {
++				close(dexfilefp);
++				dexfilefp = 0;
++
++			} else {
++				dexfilefp =
++				    open(dexfilepath, O_CREAT | O_RDWR,
++					 0666);
++				if (dexfilefp > 0) {
++					(void)write(dexfilefp, (void *) begin_,
++					      size_);
++					fsync(dexfilefp);
++					close(dexfilefp);
++				}
++
++
++			}
++			// const DexFile::CodeItem * code_item =
++			//     artmethod->GetCodeItem();
++          dumpCodeItem(dex_file,artmethod,szProcName);
++			// if (LIKELY(code_item != nullptr)) {
++			// 	int code_item_len = 0;
++			// 	uint8_t *item = (uint8_t *) code_item;
++			// 	if (code_item->tries_size_ > 0) {
++			// 		const uint8_t *handler_data =
++			// 		    (const uint8_t *) (DexFile::
++			// 				       GetTryItems
++			// 				       (*code_item,
++			// 					code_item->
++			// 					tries_size_));
++			// 		uint8_t *tail =
++			// 		    codeitem_end(&handler_data);
++			// 		code_item_len =
++			// 		    (int) (tail - item);
++			// 	} else {
++			// 		code_item_len =
++			// 		    16 +
++			// 		    code_item->
++			// 		    insns_size_in_code_units_ * 2;
++			// 	}
++			// 	memset(dexfilepath, 0, 2000);
++			// 	int size_int = (int) dex_file->Size();	// Length of data
++			// 	uint32_t method_idx =
++			// 	    artmethod->GetMethodIndex2();
++			// 	sprintf(dexfilepath,
++			// 		"/sdcard/fartDump/%s/%d_%ld.bin",
++			// 		szProcName, size_int, gettidv1());
++			// 	int fp2 =
++			// 	    open(dexfilepath,
++			// 		 O_CREAT | O_APPEND | O_RDWR,
++			// 		 0666);
++			// 	if (fp2 > 0) {
++			// 		lseek(fp2, 0, SEEK_END);
++			// 		memset(dexfilepath, 0, 2000);
++			// 		int offset = (int) (item - begin_);
++			// 		sprintf(dexfilepath,
++			// 			"{name:%s,method_idx:%d,offset:%d,code_item_len:%d,ins:",
++			// 			methodname, method_idx,
++			// 			offset, code_item_len);
++			// 		int contentlength = 0;
++			// 		while (dexfilepath[contentlength]
++			// 		       != 0)
++			// 			contentlength++;
++			// 		(void)write(fp2, (void *) dexfilepath,
++			// 		      contentlength);
++			// 		long outlen = 0;
++			// 		char *base64result =
++			// 		    base64_encode((char *) item,
++			// 				  (long)code_item_len,
++			// 				  &outlen);
++      //     char *tail = (char*)malloc(outlen + 2);
++      //     memset(tail, 0 ,outlen + 2);
++      //     sprintf(tail,"%s};",base64result); 
++			// 		(void)write(fp2, tail, outlen + 2);
++			// 		fsync(fp2);
++			// 		close(fp2);
++			// 		if (base64result != nullptr) {
++			// 			free(base64result);
++			// 			base64result = nullptr;
++			// 		}
++
++      //     if(tail != nullptr){
++      //       free(tail);
++      //       tail = nullptr;
++      //     }
++			// 	}//fp2 != nullptr
++
++			// }
++      // else{
++      //   			LOG(INFO) << "dumpArtMethod() : codeItem is null";
++      // }
++
++
++		}//procName[0]
++
++		if (dexfilepath != nullptr) {
++			free(dexfilepath);
++			dexfilepath = nullptr;
++		}
++
++	}//dumpDexAndArtMethod
++
++	extern "C" void myInvoke(ArtMethod * artmethod)
++	 SHARED_REQUIRES(Locks::mutator_lock_) {
++		JValue *result = nullptr;
++		Thread *self = nullptr;
++		uint32_t temp = 6;
++		uint32_t *args = &temp;
++		uint32_t args_size = 6;
++		artmethod->Invoke(self, args, args_size, result, "fart");
++	}
++
++//fart add end
+ ArtMethod* ArtMethod::FromReflectedMethod(const ScopedObjectAccessAlreadyRunnable& soa,
+                                           jobject jlr_method) {
+   auto* abstract_method = soa.Decode<mirror::AbstractMethod*>(jlr_method);
+@@ -235,6 +628,13 @@ uint32_t ArtMethod::FindCatchBlock(Handle<mirror::Class> exception_type,
+ 
+ void ArtMethod::Invoke(Thread* self, uint32_t* args, uint32_t args_size, JValue* result,
+                        const char* shorty) {
++  //luoyesiqu add start
++    if(nullptr == self){
++      dumpDexAndArtMethod(this);
++      return;
++    }
++  //fart add end
++
+   if (UNLIKELY(__builtin_frame_address(0) < self->GetStackEnd())) {
+     ThrowStackOverflowError(self);
+     return;
+diff --git a/runtime/art_method.h b/runtime/art_method.h
+index b65cb2351..1c0f21607 100644
+--- a/runtime/art_method.h
++++ b/runtime/art_method.h
+@@ -396,6 +396,10 @@ class ArtMethod FINAL {
+     method_index_ = new_method_index;
+   }
+ 
++// fart add start
++uint32_t GetMethodIndex2(){ return dex_method_index_; }
++//fart add end
++
+   static MemberOffset DexMethodIndexOffset() {
+     return OFFSET_OF_OBJECT_MEMBER(ArtMethod, dex_method_index_);
+   }
+diff --git a/runtime/interpreter/interpreter.cc b/runtime/interpreter/interpreter.cc
+index 8c42b3abc..2a8a9ea53 100644
+--- a/runtime/interpreter/interpreter.cc
++++ b/runtime/interpreter/interpreter.cc
+@@ -17,6 +17,7 @@
+ #include "interpreter.h"
+ 
+ #include <limits>
++#include <pthread.h>
+ 
+ #include "common_throws.h"
+ #include "interpreter_common.h"
+@@ -30,6 +31,9 @@
+ #include "jit/jit_code_cache.h"
+ 
+ namespace art {
++  //fart add start
++extern "C" void dumpDexByExecute(ArtMethod* artmethod);
++//fart add end
+ namespace interpreter {
+ 
+ static void InterpreterJni(Thread* self, ArtMethod* method, const StringPiece& shorty,
+@@ -264,12 +268,28 @@ JValue ExecuteGotoImpl<false, true>(Thread* self, const DexFile::CodeItem* code_
+                                     ShadowFrame& shadow_frame, JValue result_register);
+ #endif
+ 
++// static void* thread_run(void * arg) SHARED_REQUIRES(Locks::mutator_lock_){
++//     ArtMethod* artmethod = (ArtMethod*)arg;
++//     LOG(FATAL) << "thread_run dumpDexByExecute"<<PrettyMethod(artmethod).c_str();
++//     dumpDexByExecute(artmethod);
++//     pthread_exit(0);
++    //return nullptr;
++//}
++
+ static inline JValue Execute(
+     Thread* self,
+     const DexFile::CodeItem* code_item,
+     ShadowFrame& shadow_frame,
+     JValue result_register,
+     bool stay_in_interpreter = false) SHARED_REQUIRES(Locks::mutator_lock_) {
++	//fart add start
++  //pthread_t thread;
++  if(strstr(PrettyMethod(shadow_frame.GetMethod()).c_str(),"<clinit>") != nullptr){
++	  dumpDexByExecute(shadow_frame.GetMethod());
++    //pthread_create(&thread,nullptr,thread_run,shadow_frame.GetMethod());
++	}
++  //fart add end
++
+   DCHECK(!shadow_frame.GetMethod()->IsAbstract());
+   DCHECK(!shadow_frame.GetMethod()->IsNative());
+   if (LIKELY(shadow_frame.GetDexPC() == 0)) {  // Entering the method, but not via deoptimization.
+diff --git a/runtime/native/dalvik_system_DexFile.cc b/runtime/native/dalvik_system_DexFile.cc
+index 4bb83b62a..880081512 100644
+--- a/runtime/native/dalvik_system_DexFile.cc
++++ b/runtime/native/dalvik_system_DexFile.cc
+@@ -42,8 +42,22 @@
+ #include "well_known_classes.h"
+ #include "zip_archive.h"
+ 
+-namespace art {
++//fart add start
++#include "art_method-inl.h"
++#include "class_linker.h"
++#include "jni_internal.h"
++#include "mirror/class-inl.h"
++#include "mirror/object-inl.h"
++#include "mirror/object_array-inl.h"
++#include "reflection.h"
++#include "scoped_fast_native_object_access.h"
++#include "well_known_classes.h"
++//fart add end
+ 
++namespace art {
++//fart add start
++extern "C" void myInvoke(ArtMethod* artmethod);
++//fart add end
+ static bool ConvertJavaArrayToDexFiles(
+     JNIEnv* env,
+     jobject arrayObject,
+@@ -347,6 +361,20 @@ static jobjectArray DexFile_getClassNameList(JNIEnv* env, jclass, jobject cookie
+   return result;
+ }
+ 
++//fart add start
++static void DexFile_invokeMethodNative(JNIEnv* env, jclass,jobject method) {
++ScopedFastNativeObjectAccess soa(env);
++  if(method!=nullptr)
++  {
++		  ArtMethod* artmethod = ArtMethod::FromReflectedMethod(soa, method);
++		  myInvoke(artmethod);
++	  }	  
++
++
++  return;
++}
++//fart add end
++
+ static jint GetDexOptNeeded(JNIEnv* env,
+                             const char* filename,
+                             const char* instruction_set,
+@@ -619,7 +647,11 @@ static JNINativeMethod gMethods[] = {
+   NATIVE_METHOD(DexFile, getDexFileStatus,
+                 "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
+   NATIVE_METHOD(DexFile, getDexFileOutputPath,
+-                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;")
++                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
++                //fart add start
++  NATIVE_METHOD(DexFile, invokeMethodNative,
++                "(Ljava/lang/Object;)V")
++                //fart add end 
+ };
+ 
+ void register_dalvik_system_DexFile(JNIEnv* env) {

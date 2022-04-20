@@ -1,0 +1,24 @@
+
+project libcore/
+diff --git a/dalvik/src/main/java/dalvik/system/DexFile.java b/dalvik/src/main/java/dalvik/system/DexFile.java
+index 0a01a136e..40d24b194 100644
+--- a/dalvik/src/main/java/dalvik/system/DexFile.java
++++ b/dalvik/src/main/java/dalvik/system/DexFile.java
+@@ -389,6 +389,9 @@ public final class DexFile {
+             throws ClassNotFoundException, NoClassDefFoundError;
+     private static native String[] getClassNameList(Object cookie);
+     private static native boolean isBackedByOatFile(Object cookie);
++    //fart add start
++    private static native void invokeMethodNative(Object m);
++    //fart add end
+     /*
+      * Open a DEX file.  The value returned is a magic VM cookie.  On
+      * failure, an IOException is thrown.
+diff --git a/luni/src/test/resources/org/apache/harmony/tests/java/lang/test?.properties b/luni/src/test/resources/org/apache/harmony/tests/java/lang/test?.properties
+deleted file mode 100644
+index 4a8dfd8ef..000000000
+--- a/luni/src/test/resources/org/apache/harmony/tests/java/lang/test?.properties
++++ /dev/null
+@@ -1 +0,0 @@
+-This is a resource file with a ? in the name
+\ No newline at end of file
